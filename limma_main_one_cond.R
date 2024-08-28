@@ -43,6 +43,7 @@ library(limma)
 library(qvalue)
 library(htmlwidgets)
 library(rstudioapi)
+library(sva)
 
 ## Chdir to source dir
 path <- rstudioapi::getActiveDocumentContext()$path
@@ -56,18 +57,22 @@ source("limma_helper_functions.R")
 # temp <- unlist(strsplit(myFilePath, "\\", fixed = TRUE))
 # myFilePath <- "/home/wasim/Downloads/One-cond-limma/Example/proteinGroups.txt"
 # myFilePath <- "prodat_SILAC.xlsx"
-myFilePath <- "TestData/data_quad.xlsx"
+myFilePath <- "Parabolic_volcano/1110_data_before.xlsx"
 
-ratios <-
+data <-
   as.data.frame(readxl::read_xlsx(myFilePath, col_names = TRUE))
 
-data <- ratios
+colnames_data <- colnames(data)
+
+## Temporary change in column names
+colnames(data)[2:ncol(data)] <- c("Log2R_1", "Log2R_2", "Log2R_3", "Log2R_4")
 
 ## Display data to faciliate choice of treatment and control
 print(colnames(data))
+# browser()
 
 ## Extract gene/protein names
-# proteins <- ratios$Proteins
+# proteins <- data$Proteins
 
 #Extract required data for Limma
 condition <-
@@ -92,67 +97,10 @@ if (length(idx)) {
 }
 print(paste("data rows after removing blank rows = ", NROW(data)))
 
-# ## Extract only those proteins/peptides that has intensity values in
-# ## K out of N replicates in each group
-# rep_treats <- ncol(dat)
-# k_out_N_treatment <- read_k_out_of_N(rep_treats, 'treatment')
-# 
-# idx_nz_treatment <-
-#   which(rowSums(data[, 1:rep_treats] != 0) >= k_out_N_treatment)
-# 
-# idx_nz_both <- idx_nz_treatment
-# if (length(idx_nz_both)) {
-#   dat <- dat[idx_nz_both, ]
-#   proteins <- proteins[idx_nz_both]
-# }
+print(head(data))
 
 FC_Cutoff <- readfloat("Enter the log fold change cut off=")
-# temp <- log2(as.matrix(data[,2:ncol(data)]))
-# temp[is.infinite(temp)] <- NA
-# data[,2:ncol(data)] <- temp
 
-## Impute data
-# data_limma <- log2(as.matrix(data))
-# data_limma[is.infinite(data_limma)] <- NA
-# nan_idx <- which(is.na(data_limma))
-# temp <- reshape(temp, nrow(data_limma)*ncol(data_limma), 1)
-# hist(temp, na.rm = TRUE, xlab = "log2(intensity)", ylab = "Frequency",
-#      main =  "All data: before imputation")
-# fit <- fitdistr(c(na.exclude(data_limma)), "normal")
-# mu <- as.double(fit$estimate[1])
-# sigma <- as.double(fit$estimate[2])
-# sigma_cutoff <- 6
-# new_width_cutoff <- 0.3
-# downshift <- 1.8
-# width <- sigma_cutoff * sigma
-# new_width <- width * new_width_cutoff
-# new_sigma <- new_width / sigma_cutoff
-# new_mean <- mu - downshift * sigma
-# imputed_vals_my = rnorm(length(nan_idx), new_mean, new_sigma)
-# scaling_factor <- readfloat_0_1("Enter a number > 0 and <=1 to scale imputed values = ")
-# data_limma[nan_idx] <- imputed_vals_my*scaling_factor
-# data_limma[nan_idx] <- imputed_vals_my
-
-# ## Median Normalization Module
-# want_normalization <- as.integer(readline(
-#   cat(
-#     'Enter 1: if you want to normalize the protein intensities in each experiemnt by substrating the median of the corresponding experiment\n',
-#     '\bEnter 2: if you want to perform column wise median normalization of the data matrix\n',
-#     '\b(for definition of "column wise median normalization" see README)= '
-#   )
-# ))
-# data_limma <- data
-# if (want_normalization == 1) {
-#   boxplot(data_limma, main = "data before median substract normalization")
-#   col_med <- matrixStats::colMedians(data_limma)
-#   med_mat <- matlab::repmat(col_med, nrow(data_limma), 1)
-#   data_limma <- data_limma - med_mat
-#   boxplot(data_limma, main = "data after median substract normalization")
-# } else if (want_normalization == 2) {
-#   boxplot(data_limma, main = "data before column wise median normalization")
-#   data_limma <- median_normalization(data_limma)
-#   boxplot(data_limma, main = "data after column wise median normalization")
-# }
 
 ## Extract only those proteins/peptides that has intensity values in
 ## K out of N replicates in each group
@@ -167,6 +115,31 @@ if (length(idx_nz_both)) {
   dat <- data[idx_nz_both, c(1,sel)]
   # proteins <- proteins[idx_nz_both]
 }
+boxplot(dat[,2:ncol(dat)], names = c("rep1", "rep2", "rep3", "rep4"), main = "data before batch correction and median normalization")
+
+## Batch correction and Normalization
+# For comBat to work, you need to impute missing values, so the steps are
+# 1. Record the indexes of missing values
+data_matrix <- as.matrix(dat[,2:ncol(dat)])
+data_matrix[is.infinite(data_matrix)] <- NA
+nan_idx <- which(is.na(data_matrix))
+
+# 2. Impute missing values using a small normal distribution at the left tail of the original data distribution
+# Note, you can replace this algorithm with the one that is most applicable to you context
+data_matrix <- impute_from_normal_dist(data_matrix, nan_idx)
+
+# 3. Perform batch correction using comBat on the full data (no missing values)
+# define the batch vector to indicate which batch each sample belongs to
+batch <- c("Batch1", "Batch1", "Batch2", "Batch2")
+data_matrix <- ComBat(dat = data_matrix, batch = batch, par.prior = TRUE, prior.plots = FALSE)
+
+# 4. Replace the values at indexes where earlier missing values were with NA
+data_matrix[nan_idx] <- NA
+boxplot(data_matrix, names = c("rep1", "rep2", "rep3", "rep4"), main = "data after batch correction but before median normalization")
+norm_data <- median_normalization(data_matrix)
+dat[,2:ncol(dat)] <- norm_data
+boxplot(dat[,2:ncol(dat)], names = c("rep1", "rep2", "rep3", "rep4"), main = "data after batch correction and median normalization")
+# browser()
 
 ## Limma main code
 p <- readinteger_binary(
@@ -176,7 +149,6 @@ p <- readinteger_binary(
   )
 )
 res.eb <- one_cond_limma_SILAC(tab = dat, condition = condition, sig.level = 0.05, FC_Cutoff, p)
-# res.eb <- one_cond_limma_SILAC(tab = dat) ## calling Stephan's version
 
 ## Save the data file
 final_data <- res.eb
