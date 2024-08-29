@@ -79,20 +79,23 @@ condition <-
   readline('Enter condition name (case insensitive) as it appeared in the column names printed above= ')
 # browser()
 ## check condition
-if(is.null(condition)) stop("Need a condition.")
-if(length(condition) != 1) stop("Need exactly one condition.")
+if (is.null(condition))
+  stop("Need a condition.")
+if (length(condition) != 1)
+  stop("Need exactly one condition.")
 
 ## select condition
 sel <- grep(condition, colnames(data), ignore.case = TRUE)
-if(length(sel) < 2) stop("Need at least two replicates for one-sample differential expression")
+if (length(sel) < 2)
+  stop("Need at least two replicates for one-sample differential expression")
 
 ## removing blank rows
 print(paste("data rows before removing blank rows = ", NROW(data)))
 temp <-
-  as.matrix(rowSums(apply(data[,2:ncol(data)], 2, as.numeric), na.rm = TRUE))
+  as.matrix(rowSums(apply(data[, 2:ncol(data)], 2, as.numeric), na.rm = TRUE))
 idx <- which(is.na(temp))
 if (length(idx)) {
-  data <- data[-idx,]
+  data <- data[-idx, ]
   # proteins <- proteins[-idx]
 }
 print(paste("data rows after removing blank rows = ", NROW(data)))
@@ -112,34 +115,55 @@ idx_nz_treatment <-
 
 idx_nz_both <- idx_nz_treatment
 if (length(idx_nz_both)) {
-  dat <- data[idx_nz_both, c(1,sel)]
+  dat <- data[idx_nz_both, c(1, sel)]
   # proteins <- proteins[idx_nz_both]
 }
-boxplot(dat[,2:ncol(dat)], names = c("rep1", "rep2", "rep3", "rep4"), main = "data before batch correction and median normalization")
+boxplot(dat[, 2:ncol(dat)],
+        names = c("rep1", "rep2", "rep3", "rep4"),
+        main = "data before batch correction and median normalization")
 
-## Batch correction and Normalization
-# For comBat to work, you need to impute missing values, so the steps are
-# 1. Record the indexes of missing values
-data_matrix <- as.matrix(dat[,2:ncol(dat)])
-data_matrix[is.infinite(data_matrix)] <- NA
-nan_idx <- which(is.na(data_matrix))
 
-# 2. Impute missing values using a small normal distribution at the left tail of the original data distribution
-# Note, you can replace this algorithm with the one that is most applicable to you context
-data_matrix <- impute_from_normal_dist(data_matrix, nan_idx)
-
-# 3. Perform batch correction using comBat on the full data (no missing values)
 # define the batch vector to indicate which batch each sample belongs to
 batch <- c("Batch1", "Batch1", "Batch2", "Batch2")
-data_matrix <- ComBat(dat = data_matrix, batch = batch, par.prior = TRUE, prior.plots = FALSE)
-
-# 4. Replace the values at indexes where earlier missing values were with NA
-data_matrix[nan_idx] <- NA
-boxplot(data_matrix, names = c("rep1", "rep2", "rep3", "rep4"), main = "data after batch correction but before median normalization")
-norm_data <- median_normalization(data_matrix)
-dat[,2:ncol(dat)] <- norm_data
-boxplot(dat[,2:ncol(dat)], names = c("rep1", "rep2", "rep3", "rep4"), main = "data after batch correction and median normalization")
-# browser()
+p <- readnum('Enter 0: if you want to use batch correction, otherwise enter any positive number = ')
+if (!p) {
+  ## Batch correction and Normalization
+  # For comBat to work, you need to impute missing values, so the steps are
+  # 1. Record the indexes of missing values
+  data_matrix <- as.matrix(dat[, 2:ncol(dat)])
+  data_matrix[is.infinite(data_matrix)] <- NA
+  nan_idx <- which(is.na(data_matrix))
+  
+  # 2. Impute missing values using a small normal distribution at the left tail of the original data distribution
+  # Note, you can replace this algorithm with the one that is most applicable to you context
+  data_matrix <- impute_from_normal_dist(data_matrix, nan_idx)
+  
+  # 3. Perform batch correction using comBat on the full data (no missing values)
+  
+  data_matrix <- ComBat(
+    dat = data_matrix,
+    batch = batch,
+    par.prior = TRUE,
+    prior.plots = FALSE
+  )
+  
+  # 4. Replace the values at indexes where earlier missing values were with NA
+  data_matrix[nan_idx] <- NA
+  boxplot(data_matrix,
+          names = c("rep1", "rep2", "rep3", "rep4"),
+          main = "data after batch correction but before median normalization")
+  
+  norm_data <- median_normalization(data_matrix)
+  dat[, 2:ncol(dat)] <- norm_data
+  boxplot(dat[, 2:ncol(dat)],
+          names = c("rep1", "rep2", "rep3", "rep4"),
+          main = "data after batch correction and median normalization")
+} else {
+  dat[, 2:ncol(dat)] <- median_normalization(as.matrix(dat[, 2:ncol(dat)]))
+  boxplot(dat[, 2:ncol(dat)],
+          names = c("rep1", "rep2", "rep3", "rep4"),
+          main = "data after median normalization")
+}
 
 ## Limma main code
 p <- readinteger_binary(
@@ -148,7 +172,11 @@ p <- readinteger_binary(
     '\bEnter 0: if you want use limma moderated pvalues without adjustment in the volcano plot ='
   )
 )
-res.eb <- one_cond_limma_SILAC(tab = dat, condition = condition, sig.level = 0.05, FC_Cutoff, p)
+res.eb <- one_cond_limma_SILAC(tab = dat,
+                               condition = condition,
+                               sig.level = 0.05,
+                               FC_Cutoff,
+                               p)
 
 ## Save the data file
 final_data <- res.eb
@@ -160,8 +188,9 @@ filename_mod <-
   paste0(format(Sys.time(), "%Y%m%d_%H%M%S"), '_limma_plot')
 
 if (p) {
-  title <- paste0(toupper(condition), ": volcano plot of moderated p-values after BH adjustment")
-}else {
+  title <- paste0(toupper(condition),
+                  ": volcano plot of moderated p-values after BH adjustment")
+} else {
   title <- paste0(toupper(condition), ": volcano plot of moderated p-values")
 }
 

@@ -203,6 +203,17 @@ readinteger <- function(str)
   }
   return(n)
 }
+
+readnum <- function(str)
+{
+  n <- readline(prompt = str)
+  n <- as.integer(n)
+  if (is.na(n) || !is.numeric(n)) {
+    print("Incorrect input, enter a number")
+    n <- readline(str)
+  }
+  return(n)
+}
 ################################################################################
 read_k_out_of_N <- function(rep_treats, group)
 {
