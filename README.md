@@ -1,5 +1,7 @@
 # This is a pipeline to analyze proteomic data (SILAC-style ratios) that is already log2 transformed with one condition.
 
+## To run the program, click the `Source` button on the top right-hand corner of the editor window in RStudio.
+
 ## The accepted data structure is as follows:
 - The data file should be in xlsx format.
 - First column is the names of genes/proteins followed by data replicates.
